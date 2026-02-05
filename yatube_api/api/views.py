@@ -1,14 +1,11 @@
+from django.shortcuts import get_object_or_404
 from rest_framework import viewsets
-from rest_framework.exceptions import PermissionDenied
-from rest_framework.generics import (
-    ListCreateAPIView, RetrieveUpdateDestroyAPIView
-)
-
 
 from posts.models import Post, Comment, Group, User
 from .serializers import (
     PostSerializer, CommentSerializer, GroupSerializer, UserSerializer
 )
+from .permissions import AuthorOnly
 
 
 class GroupViewSet(viewsets.ReadOnlyModelViewSet):
@@ -19,20 +16,15 @@ class GroupViewSet(viewsets.ReadOnlyModelViewSet):
 class PostViewSet(viewsets.ModelViewSet):
     queryset = Post.objects.all()
     serializer_class = PostSerializer
+    permission_classes = (AuthorOnly,)
 
     def perform_create(self, serializer):
         serializer.save(author=self.request.user)
 
     def perform_update(self, serializer):
-        instance = self.get_object()
-        if instance.author != self.request.user:
-            raise PermissionDenied()
         serializer.save(author=self.request.user)
 
     def perform_destroy(self, instance):
-        instance = self.get_object()
-        if instance.author != self.request.user:
-            raise PermissionDenied()
         instance.delete()
 
 
@@ -41,37 +33,20 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = UserSerializer
 
 
-class CommentListView(ListCreateAPIView):
+class CommentViewSet(viewsets.ModelViewSet):
     serializer_class = CommentSerializer
+    permission_classes = (AuthorOnly,)
 
     def get_queryset(self):
-        post_id = self.kwargs.get('post_id')
-        comments = Comment.objects.filter(post=post_id)
-        return comments
+        post_id = self.kwargs.get('post_pk')
+        return Comment.objects.filter(post=post_id)
 
     def perform_create(self, serializer):
-        post = Post.objects.get(id=self.kwargs.get('post_id'))
+        post = get_object_or_404(Post, id=self.kwargs.get('post_pk'))
         serializer.save(post=post, author=self.request.user)
 
-
-class CommentDetailView(RetrieveUpdateDestroyAPIView):
-    serializer_class = CommentSerializer
-    lookup_url_kwarg = 'comment_id'
-
-    def get_queryset(self):
-        post_id = self.kwargs.get('post_id')
-        comment_id = self.kwargs.get('comment_id')
-        comments = Comment.objects.filter(post=post_id, id=comment_id)
-        return comments
-
     def perform_update(self, serializer):
-        instance = self.get_object()
-        if instance.author != self.request.user:
-            raise PermissionDenied()
         serializer.save(author=self.request.user)
 
     def perform_destroy(self, instance):
-        instance = self.get_object()
-        if instance.author != self.request.user:
-            raise PermissionDenied()
         instance.delete()
